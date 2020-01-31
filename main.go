@@ -4,7 +4,7 @@ import (
     "crypto/sha1"
     "fmt"
     "io"
-    //"io/ioutil"
+    "io/ioutil"
     "log"
     "os"
     "path/filepath"
@@ -22,6 +22,7 @@ type file_info struct {
 
 type processor struct {
     root_dir string
+    tmp_dir string
     todo_files []*file_info
 }
 
@@ -60,6 +61,7 @@ func (p* processor) init () error {
         return err
     }
     p.root_dir = path
+    log.Println("root directory is", p.root_dir)
     return nil
 }
 
@@ -84,33 +86,121 @@ func (p* processor) scanTodos() error {
 }
 
 func (p* processor) removeDuplicates() error {
+
+    info_map := make(map[string]*file_info)
+
+    var err error
+
+    for _, todo := range p.todo_files {
+        done, found := info_map[todo.hash]
+
+        if !found {
+            info_map[todo.hash] = todo
+            continue
+        }
+
+        if todo.mod_time.Before(done.mod_time) {
+            err = done.remove()
+        } else {
+            err =todo.remove()
+        }
+
+        if err != nil {
+            return err
+        }
+    }
+
+    p.todo_files = nil
+
+    for _, todo := range info_map {
+        p.todo_files = append(p.todo_files, todo)
+    }
+
     return nil
 }
 
 func (p* processor) filterDones() error {
+    all := p.todo_files
+    p.todo_files = nil
+
+    for _, todo := range all {
+        if todo.path != todo.dstPath(p.root_dir) {
+            p.todo_files = append(p.todo_files, todo)
+        }
+    }
+
     return nil
 }
 
 func (p* processor) moveToTmpdir() error {
+
+    if len(p.todo_files) == 0 {
+        return nil
+    }
+
+    var err error
+
+    p.tmp_dir, err = ioutil.TempDir(p.root_dir, "")
+    if err != nil {
+        log.Fatal("fail create temp dir", err)
+        return err
+    }
+
+    for _, todo := range p.todo_files {
+        dst_path := fmt.Sprintf("%q/%q%q", p.tmp_dir, todo.hash, todo.ext)
+        err = todo.moveTo(dst_path)
+        if err != nil {
+            return err
+        }
+    }
+
     return nil
 }
 
 func (p* processor) store() error {
+    for _, todo := range p.todo_files {
+        err := todo.moveTo(todo.dstPath(p.root_dir))
+        if err != nil {
+            return err
+        }
+    }
     return nil
 }
 
 func (p* processor) clear() error {
+    if p.tmp_dir != "" {
+        return os.Remove(p.tmp_dir)
+    }
     return nil
 }
 
-func (f* file_info) DstDir(root_dir string) string {
+func (f* file_info) remove() error {
+    err := os.Remove(f.path)
+    if err != nil {
+        log.Fatal("failed: ", err)
+    }
+    return err
+}
+
+func (f* file_info) moveTo(dst_path string) error {
+    err := os.Rename(f.path, dst_path)
+    if err != nil {
+        log.Fatal("failed", err)
+        return err
+    }
+    f.path = dst_path
+    return nil
+}
+
+
+func (f* file_info) dstDir(root_dir string) string {
     return fmt.Sprintf("%q/%q",
         root_dir, f.mod_time.Format("2006-01"))
 }
 
-func (f* file_info) DstPath(root_dir string) string {
+func (f* file_info) dstPath(root_dir string) string {
     return fmt.Sprintf("%q/%q-%q%q",
-        f.DstDir(root_dir), f.mod_time.Format("02"), f.hash, f.ext)
+        f.dstDir(root_dir), f.mod_time.Format("02"), f.hash, f.ext)
 }
 
 func (f* file_info) Hash() string {
@@ -128,74 +218,6 @@ func (f* file_info) Hash() string {
     f.hash = fmt.Sprintf("%x", h.Sum(nil))
     return f.hash
 }
-
-
-//func (f* file_info) MoveFile(setting env_setting, done_files map[string]*file_info) {
-//
-//    done, found:= done_files[f.hash]
-//
-//    if found {
-//        if f.os_info.ModTime().Before(done.os_info.ModTime()) {
-//            log.Println("removing done file:", done.path, "newer than todo file:", f.path)
-//            if err := os.Remove(f.path); err != nil {
-//                log.Fatal("failed, ", err)
-//            }
-//            //todo file to be moved
-//
-//        } else {
-//            log.Println("removing todo file:", f.path, "newer than done file:", done.path)
-//            if err := os.Remove(f.path); err != nil {
-//                log.Fatal("failed, ", err)
-//            }
-//            //file in place
-//            return
-//        }
-//    }
-//
-//    dir := f.DstDir(setting)
-//    dst := f.DstPath(setting)
-//
-//    if dst == f.path {
-//        log.Println("skip:", f.path)
-//        done_files[f.hash] = f
-//        return
-//    }
-//
-//    _, err := os.Lstat(dst)
-//    //do not overwrite file, move to tmp name
-//    if err == nil {
-//        tmpfile, err := ioutil.TempFile(setting.root, "*"+f.ext)
-//        if err != nil {
-//            log.Fatal("fail creating temp file, error", err)
-//            return
-//        }
-//        dst = tmpfile.Name()
-//        tmpfile.Close()
-//        log.Println("moving", f.path, "to", dst)
-//        err = os.Rename(f.path, dst)
-//        if err != nil {
-//            log.Fatal("failed", err)
-//            return
-//        }
-//        return
-//    }
-//
-//    err = os.MkdirAll(dir, 0755)
-//    if err != nil {
-//        log.Fatal("fail create dir: ", dir, "error:", err)
-//        return
-//    }
-//
-//    log.Println("moving", f.path, "to", dst)
-//    err = os.Rename(f.path, dst)
-//    if err != nil {
-//        log.Fatal("failed", err)
-//        return
-//    }
-//    f.path = dst
-//    done_files[f.hash] = f
-//
-//}
 
 func GuessExt(path string) string {
     path = strings.ToLower(path)
