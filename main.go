@@ -115,13 +115,26 @@ func (f* file_info) MoveFile(setting env_setting, done_files map[string]*file_in
 
 }
 
+func GuessExt(path string) string {
+    path = strings.ToLower(path)
+    path = strings.TrimRight(path, "~")
+    ext := filepath.Ext(path)
+    if ext == "" {
+        return ext
+    }
+    if strings.HasPrefix(ext, ".~") == false {
+        return ext
+    }
+    return GuessExt(strings.TrimSuffix(path, ext))
+}
+
 func NewFileInfo(info os.FileInfo, path string) *file_info {
 
     f := file_info{os_info: info, path: path}
 
     f.month = info.ModTime().Format("2006-01")
     f.date = info.ModTime().Format("02")
-    f.ext = strings.ToLower(filepath.Ext(path))
+    f.ext = GuessExt(path)
 
     log.Println("hashing", path)
 
