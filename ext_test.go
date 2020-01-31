@@ -17,7 +17,7 @@ func TestGuessExt(t *testing.T) {
 	}
 
     for _, c := range cases {
-        got := GuessExt(c.in)
+        got := guessExt(c.in)
         if got != c.want {
             t.Errorf("GuessExt(%q) == %q, want %q", c.in, got, c.want)
         }

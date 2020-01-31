@@ -12,18 +12,18 @@ import (
     "time"
 )
 
-type file_info struct {
+type fileInfo struct {
     path string
-    mod_time time.Time
+    modTime time.Time
     ext string
     hash string
 }
 
 
 type processor struct {
-    root_dir string
-    tmp_dir string
-    todo_files []*file_info
+    rootDir string
+    tmpDir string
+    todoFiles []*fileInfo
 }
 
 func (p* processor) Process() error {
@@ -60,20 +60,20 @@ func (p* processor) init () error {
         log.Println(err)
         return err
     }
-    p.root_dir = path
-    log.Println("root directory is", p.root_dir)
+    p.rootDir = path
+    log.Println("root directory is", p.rootDir)
     return nil
 }
 
 func (p* processor) scanTodos() error {
 
-    err := filepath.Walk(p.root_dir, func (path string, info os.FileInfo, err error) error {
+    err := filepath.Walk(p.rootDir, func (path string, info os.FileInfo, err error) error {
         if err != nil {
             log.Fatal(err)
             return err
         }
         if !info.IsDir() {
-            p.todo_files = append(p.todo_files, NewFileInfo(path, info))
+            p.todoFiles = append(p.todoFiles, newFileInfo(path, info))
         }
         return nil
     })
@@ -87,19 +87,19 @@ func (p* processor) scanTodos() error {
 
 func (p* processor) removeDuplicates() error {
 
-    info_map := make(map[string]*file_info)
+    infoMap := make(map[string]*fileInfo)
 
     var err error
 
-    for _, todo := range p.todo_files {
-        done, found := info_map[todo.hash]
+    for _, todo := range p.todoFiles {
+        done, found := infoMap[todo.hash]
 
         if !found {
-            info_map[todo.hash] = todo
+            infoMap[todo.hash] = todo
             continue
         }
 
-        if todo.mod_time.Before(done.mod_time) {
+        if todo.modTime.Before(done.modTime) {
             err = done.remove()
         } else {
             err =todo.remove()
@@ -110,22 +110,22 @@ func (p* processor) removeDuplicates() error {
         }
     }
 
-    p.todo_files = nil
+    p.todoFiles = nil
 
-    for _, todo := range info_map {
-        p.todo_files = append(p.todo_files, todo)
+    for _, todo := range infoMap {
+        p.todoFiles = append(p.todoFiles, todo)
     }
 
     return nil
 }
 
 func (p* processor) filterDones() error {
-    all := p.todo_files
-    p.todo_files = nil
+    all := p.todoFiles
+    p.todoFiles = nil
 
     for _, todo := range all {
-        if todo.path != todo.dstPath(p.root_dir) {
-            p.todo_files = append(p.todo_files, todo)
+        if todo.path != todo.dstPath(p.rootDir) {
+            p.todoFiles = append(p.todoFiles, todo)
         }
     }
 
@@ -134,21 +134,21 @@ func (p* processor) filterDones() error {
 
 func (p* processor) moveToTmpdir() error {
 
-    if len(p.todo_files) == 0 {
+    if len(p.todoFiles) == 0 {
         return nil
     }
 
     var err error
 
-    p.tmp_dir, err = ioutil.TempDir(p.root_dir, "")
+    p.tmpDir, err = ioutil.TempDir(p.rootDir, "")
     if err != nil {
         log.Fatal("fail create temp dir", err)
         return err
     }
 
-    for _, todo := range p.todo_files {
-        dst_path := fmt.Sprintf("%q/%q%q", p.tmp_dir, todo.hash, todo.ext)
-        err = todo.moveTo(dst_path)
+    for _, todo := range p.todoFiles {
+        dstPath := fmt.Sprintf("%q/%q%q", p.tmpDir, todo.hash, todo.ext)
+        err = todo.moveTo(dstPath)
         if err != nil {
             return err
         }
@@ -158,8 +158,8 @@ func (p* processor) moveToTmpdir() error {
 }
 
 func (p* processor) store() error {
-    for _, todo := range p.todo_files {
-        err := todo.moveTo(todo.dstPath(p.root_dir))
+    for _, todo := range p.todoFiles {
+        err := todo.moveTo(todo.dstPath(p.rootDir))
         if err != nil {
             return err
         }
@@ -168,13 +168,13 @@ func (p* processor) store() error {
 }
 
 func (p* processor) clear() error {
-    if p.tmp_dir != "" {
-        return os.Remove(p.tmp_dir)
+    if p.tmpDir != "" {
+        return os.Remove(p.tmpDir)
     }
     return nil
 }
 
-func (f* file_info) remove() error {
+func (f* fileInfo) remove() error {
     err := os.Remove(f.path)
     if err != nil {
         log.Fatal("failed: ", err)
@@ -182,28 +182,28 @@ func (f* file_info) remove() error {
     return err
 }
 
-func (f* file_info) moveTo(dst_path string) error {
-    err := os.Rename(f.path, dst_path)
+func (f* fileInfo) moveTo(dstPath string) error {
+    err := os.Rename(f.path, dstPath)
     if err != nil {
         log.Fatal("failed", err)
         return err
     }
-    f.path = dst_path
+    f.path = dstPath
     return nil
 }
 
 
-func (f* file_info) dstDir(root_dir string) string {
+func (f* fileInfo) dstDir(rootDir string) string {
     return fmt.Sprintf("%q/%q",
-        root_dir, f.mod_time.Format("2006-01"))
+        rootDir, f.modTime.Format("2006-01"))
 }
 
-func (f* file_info) dstPath(root_dir string) string {
+func (f* fileInfo) dstPath(rootDir string) string {
     return fmt.Sprintf("%q/%q-%q%q",
-        f.dstDir(root_dir), f.mod_time.Format("02"), f.hash, f.ext)
+        f.dstDir(rootDir), f.modTime.Format("02"), f.hash, f.ext)
 }
 
-func (f* file_info) Hash() string {
+func (f* fileInfo) Hash() string {
     fd, err := os.Open(f.path)
     if err != nil {
         log.Fatal(err)
@@ -219,7 +219,7 @@ func (f* file_info) Hash() string {
     return f.hash
 }
 
-func GuessExt(path string) string {
+func guessExt(path string) string {
     path = strings.ToLower(path)
     path = strings.TrimRight(path, "~")
     ext := filepath.Ext(path)
@@ -229,13 +229,13 @@ func GuessExt(path string) string {
     if strings.HasPrefix(ext, ".~") == false {
         return ext
     }
-    return GuessExt(strings.TrimSuffix(path, ext))
+    return guessExt(strings.TrimSuffix(path, ext))
 }
 
-func NewFileInfo(path string, info os.FileInfo) *file_info {
+func newFileInfo(path string, info os.FileInfo) *fileInfo {
 
-    f := file_info{mod_time: info.ModTime(), path: path}
-    f.ext = GuessExt(path)
+    f := fileInfo{modTime: info.ModTime(), path: path}
+    f.ext = guessExt(path)
 
     if info.Size() > 1024 * 1024 * 5 {
         log.Println("hashing", path)
