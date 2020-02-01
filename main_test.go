@@ -1,0 +1,68 @@
+package main
+
+import (
+    "io/ioutil"
+    "os"
+    "time"
+    "testing"
+)
+
+func setUp(t *testing.T) func(t *testing.T) {
+    rootDir, err := os.Getwd()
+    if err != nil {
+        t.Error("fail Getwd", err)
+    }
+    wd, err := ioutil.TempDir("test/data", "tmp_")
+    if err != nil {
+        t.Error("fail create temp dir", err)
+    }
+    err = os.Chdir(wd)
+    if err != nil {
+        t.Error("fail entering temp dir", err)
+        return nil
+    }
+    return func(t *testing.T) {
+        err := os.Chdir(rootDir)
+        if err != nil {
+            t.Error("fail backing to root dir", rootDir)
+            return
+        }
+        //err = os.RemoveAll(wd)
+        //if err != nil {
+        //    t.Error("fail clean temp dir", rootDir)
+        //    return
+        //}
+    }
+}
+
+func TestOneFile(t *testing.T) {
+    tearDown := setUp(t)
+    defer tearDown(t)
+
+    bytes := []byte{'a'}
+
+    err := ioutil.WriteFile("abc.jpg", bytes, 0644)
+    if err != nil {
+        t.Error("fail write file", err)
+    }
+
+    time := time.Date(2006, time.February, 1, 3, 4, 5, 0, time.UTC)
+    err = os.Chtimes("abc.jpg", time, time)
+
+    if err != nil {
+        t.Error("fail Chtimes", err)
+    }
+
+    p := processor{}
+    p.Process()
+
+    _, err = os.Lstat("2006-02/01-86f7e437faa5a7fce15d1ddcb9eaeaea377667b8.jpg")
+    if err != nil {
+        t.Error("fail move to", err)
+    }
+
+    _, err = os.Lstat("abc.jpg")
+    if err == nil {
+        t.Error("fail move, abc.jpg remains")
+    }
+}

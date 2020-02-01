@@ -192,6 +192,9 @@ func (f* fileInfo) moveTo(dstPath string) error {
     err := os.Rename(f.path, dstPath)
     if err != nil && os.IsNotExist(err) {
         err = os.MkdirAll(filepath.Dir(dstPath), 0755)
+        if err == nil {
+            err = os.Rename(f.path, dstPath)
+        }
     }
     if err != nil {
         log.Fatal("failed: ", err)
