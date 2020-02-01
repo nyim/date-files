@@ -140,14 +140,15 @@ func (p* processor) moveToTmpdir() error {
 
     var err error
 
-    p.tmpDir, err = ioutil.TempDir(p.rootDir, "")
+    p.tmpDir, err = ioutil.TempDir(p.rootDir, "tmp_")
+    log.Println("temp dir is", p.tmpDir)
     if err != nil {
         log.Fatal("fail create temp dir", err)
         return err
     }
 
     for _, todo := range p.todoFiles {
-        dstPath := fmt.Sprintf("%q/%q%q", p.tmpDir, todo.hash, todo.ext)
+        dstPath := fmt.Sprintf("%s/%s%s", p.tmpDir, todo.hash, todo.ext)
         err = todo.moveTo(dstPath)
         if err != nil {
             return err
@@ -169,7 +170,10 @@ func (p* processor) store() error {
 
 func (p* processor) clear() error {
     if p.tmpDir != "" {
-        return os.Remove(p.tmpDir)
+        err := os.Remove(p.tmpDir)
+        if err != nil {
+            log.Printf("failed remove tmp dir %v error %v\n", p.tmpDir, err)
+        }
     }
     return nil
 }
@@ -183,9 +187,14 @@ func (f* fileInfo) remove() error {
 }
 
 func (f* fileInfo) moveTo(dstPath string) error {
+    log.Printf("moving %v to %v\n", f.path, dstPath)
+
     err := os.Rename(f.path, dstPath)
+    if err != nil && os.IsNotExist(err) {
+        err = os.MkdirAll(filepath.Dir(dstPath), 0755)
+    }
     if err != nil {
-        log.Fatal("failed", err)
+        log.Fatal("failed: ", err)
         return err
     }
     f.path = dstPath
@@ -194,12 +203,12 @@ func (f* fileInfo) moveTo(dstPath string) error {
 
 
 func (f* fileInfo) dstDir(rootDir string) string {
-    return fmt.Sprintf("%q/%q",
+    return fmt.Sprintf("%v/%v",
         rootDir, f.modTime.Format("2006-01"))
 }
 
 func (f* fileInfo) dstPath(rootDir string) string {
-    return fmt.Sprintf("%q/%q-%q%q",
+    return fmt.Sprintf("%v/%v-%v%v",
         f.dstDir(rootDir), f.modTime.Format("02"), f.hash, f.ext)
 }
 
