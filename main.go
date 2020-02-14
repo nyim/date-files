@@ -101,6 +101,7 @@ func (p* processor) removeDuplicates() error {
 
         if todo.modTime.Before(done.modTime) {
             err = done.remove()
+            infoMap[todo.hash] = todo
         } else {
             err =todo.remove()
         }
@@ -149,6 +150,7 @@ func (p* processor) moveToTmpdir() error {
 
     for _, todo := range p.todoFiles {
         dstPath := fmt.Sprintf("%s/%s%s", p.tmpDir, todo.hash, todo.ext)
+        log.Printf("moveToTmpdir %s %s\n", todo.path, dstPath)
         err = todo.moveTo(dstPath)
         if err != nil {
             return err
@@ -190,18 +192,32 @@ func (f* fileInfo) moveTo(dstPath string) error {
     log.Printf("moving %v to %v\n", f.path, dstPath)
 
     err := os.Rename(f.path, dstPath)
-    if err != nil && os.IsNotExist(err) {
+
+    if err == nil {
+        f.path = dstPath
+        return nil
+    }
+
+    if os.IsNotExist(err) {
+        log.Println("creating target dir: ", filepath.Dir(dstPath))
         err = os.MkdirAll(filepath.Dir(dstPath), 0755)
-        if err == nil {
-            err = os.Rename(f.path, dstPath)
+        if err != nil {
+            log.Fatal("fail creating parent dir", err)
+            return err
         }
+        err = os.Rename(f.path, dstPath)
+        if err == nil {
+            f.path = dstPath
+            return nil
+        } else {
+            log.Fatal("fail moving after creating temp dir: ", err)
+        }
+    } else {
+        log.Fatal("fail moving: ", err)
     }
-    if err != nil {
-        log.Fatal("failed: ", err)
-        return err
-    }
-    f.path = dstPath
-    return nil
+
+    return err
+
 }
 
 
