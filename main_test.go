@@ -35,6 +35,32 @@ func setUp(t *testing.T) func(t *testing.T) {
     }
 }
 
+func TestKeepEmptyExt(t *testing.T) {
+    tearDown := setUp(t)
+    defer tearDown(t)
+    bytes := []byte{'a'}
+
+    err := ioutil.WriteFile("abc", bytes, 0644)
+    if err != nil {
+        t.Error("fail write file", err)
+    }
+
+    mtime := time.Date(2006, time.February, 1, 3, 4, 5, 0, time.UTC)
+    err = os.Chtimes("abc", mtime, mtime)
+
+    if err != nil {
+        t.Error("fail Chtimes", err)
+    }
+
+    p := processor{}
+    p.Process()
+
+    _, err = os.Lstat("abc")
+    if err != nil {
+        t.Error("abc without ext name should not be moved")
+    }
+}
+
 func TestRemoveDone(t *testing.T) {
     tearDown := setUp(t)
     defer tearDown(t)

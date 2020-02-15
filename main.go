@@ -73,7 +73,12 @@ func (p* processor) scanTodos() error {
             return err
         }
         if !info.IsDir() {
-            p.todoFiles = append(p.todoFiles, newFileInfo(path, info))
+            fi := newFileInfo(path, info)
+            if fi.ext == "" {
+                log.Println("skipping file without ext", path)
+                return nil
+            }
+            p.todoFiles = append(p.todoFiles, fi)
         }
         return nil
     })
