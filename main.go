@@ -105,9 +105,11 @@ func (p* processor) removeDuplicates() error {
         }
 
         if todo.modTime.Before(done.modTime) {
+            log.Printf("removing file in queue: %s\n", done.path)
             err = done.remove()
             infoMap[todo.hash] = todo
         } else {
+            log.Printf("removing file in todo: %s\n", todo.path)
             err =todo.remove()
         }
 
@@ -167,7 +169,9 @@ func (p* processor) moveToTmpdir() error {
 
 func (p* processor) store() error {
     for _, todo := range p.todoFiles {
-        err := todo.moveTo(todo.dstPath(p.rootDir))
+        path := todo.dstPath(p.rootDir)
+        log.Printf("store %s to %s\n", todo.path, path)
+        err := todo.moveTo(path)
         if err != nil {
             return err
         }
